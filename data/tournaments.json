@@ -1,0 +1,35 @@
+[
+  {
+    "id": "0e12cfb6-a8f4-4d15-8fe8-518e03e2c086",
+    "title": "copa",
+    "type": "municipal",
+    "status": "Inscrições abertas",
+    "startDate": "2026-04-24",
+    "endDate": "2026-05-30",
+    "location": "Casa do paciente",
+    "teams": 8,
+    "modality": "futsal"
+  },
+  {
+    "id": "seed-escolar-futsal",
+    "title": "Copa Escolar de Futsal 2026",
+    "type": "escolar",
+    "status": "Em andamento",
+    "startDate": "2026-03-15",
+    "endDate": "2026-04-20",
+    "location": "Ginásio Municipal",
+    "teams": 16,
+    "modality": "Futsal"
+  },
+  {
+    "id": "seed-municipal-volei",
+    "title": "Torneio Municipal de Vôlei",
+    "type": "municipal",
+    "status": "Inscrições abertas",
+    "startDate": "2026-04-01",
+    "endDate": "2026-04-30",
+    "location": "Quadra Poliesportiva",
+    "teams": 12,
+    "modality": "Vôlei"
+  }
+]

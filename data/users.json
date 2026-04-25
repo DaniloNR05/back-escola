@@ -1,0 +1,10 @@
+[
+  {
+    "id": "admin-default",
+    "name": "Administrador",
+    "email": "admin@porteirinhajoga.com",
+    "password": "admin123",
+    "role": "admin",
+    "registrationType": null
+  }
+]
