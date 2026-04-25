@@ -12,8 +12,20 @@ const registrationsFilePath = path.join(__dirname, "..", "data", "registrations.
 const usersFilePath = path.join(__dirname, "..", "data", "users.json");
 const app = express();
 const port = process.env.PORT || 3001;
+const configuredOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean)
+  : [];
 
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || configuredOrigins.length === 0 || configuredOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Origem não permitida pelo CORS."));
+  },
+}));
 app.use(express.json());
 
 async function readJsonFile(filePath) {
