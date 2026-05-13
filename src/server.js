@@ -65,8 +65,44 @@ function registrationTypeForTournament(tournamentType) {
   return tournamentType === "escolar" ? "jep" : "comunidade";
 }
 
-function normalizeTournament(payload) {
+function normalizeMatch(payload) {
+  const homeRegistrationId = typeof payload?.homeRegistrationId === "string"
+    ? payload.homeRegistrationId.trim()
+    : "";
+  const awayRegistrationId = typeof payload?.awayRegistrationId === "string"
+    ? payload.awayRegistrationId.trim()
+    : "";
+  const winnerRegistrationId = typeof payload?.winnerRegistrationId === "string" && payload.winnerRegistrationId.trim()
+    ? payload.winnerRegistrationId.trim()
+    : null;
+
   return {
+    id: typeof payload?.id === "string" && payload.id.trim() ? payload.id.trim() : randomUUID(),
+    stage: payload?.stage?.trim() || "Fase unica",
+    homeRegistrationId,
+    awayRegistrationId,
+    homeScore: Number.isFinite(Number(payload?.homeScore)) ? Number(payload.homeScore) : null,
+    awayScore: Number.isFinite(Number(payload?.awayScore)) ? Number(payload.awayScore) : null,
+    winnerRegistrationId,
+    scheduledAt: payload?.scheduledAt?.trim() || "",
+    location: payload?.location?.trim() || "",
+  };
+}
+
+function sanitizeTournament(tournament) {
+  return {
+    ...tournament,
+    matches: Array.isArray(tournament.matches)
+      ? tournament.matches.map((match) => normalizeMatch(match))
+      : [],
+    championRegistrationIds: Array.isArray(tournament.championRegistrationIds)
+      ? tournament.championRegistrationIds.filter((item) => typeof item === "string" && item.trim())
+      : [],
+  };
+}
+
+function normalizeTournament(payload) {
+  return sanitizeTournament({
     id: randomUUID(),
     title: payload.title.trim(),
     type: payload.type === "escolar" ? "escolar" : "municipal",
@@ -76,7 +112,7 @@ function normalizeTournament(payload) {
     location: payload.location?.trim() || "Local a definir",
     teams: Number(payload.teams) || 0,
     modality: payload.modality?.trim() || "Modalidade a definir",
-  };
+  });
 }
 
 function validateTournament(payload) {
@@ -157,6 +193,64 @@ function validateAthlete(payload) {
   return null;
 }
 
+function validateCompetitionUpdate(payload, registrations) {
+  const registrationIds = new Set(registrations.map((registration) => registration.id));
+
+  if (payload?.matches !== undefined && !Array.isArray(payload.matches)) {
+    return "Os confrontos enviados são inválidos.";
+  }
+
+  if (payload?.championRegistrationIds !== undefined && !Array.isArray(payload.championRegistrationIds)) {
+    return "Os campeões enviados são inválidos.";
+  }
+
+  for (const rawMatch of payload?.matches ?? []) {
+    const match = normalizeMatch(rawMatch);
+
+    if (!match.homeRegistrationId || !match.awayRegistrationId) {
+      return "Selecione os dois times de cada confronto.";
+    }
+
+    if (match.homeRegistrationId === match.awayRegistrationId) {
+      return "Um confronto não pode repetir o mesmo time nos dois lados.";
+    }
+
+    if (!registrationIds.has(match.homeRegistrationId) || !registrationIds.has(match.awayRegistrationId)) {
+      return "Um confronto possui equipes que não pertencem a este campeonato.";
+    }
+
+    if (
+      match.winnerRegistrationId
+      && match.winnerRegistrationId !== match.homeRegistrationId
+      && match.winnerRegistrationId !== match.awayRegistrationId
+    ) {
+      return "O vencedor do confronto precisa ser um dos times da partida.";
+    }
+
+    if (
+      match.homeScore !== null
+      && (!Number.isInteger(match.homeScore) || match.homeScore < 0)
+    ) {
+      return "O placar do time mandante é inválido.";
+    }
+
+    if (
+      match.awayScore !== null
+      && (!Number.isInteger(match.awayScore) || match.awayScore < 0)
+    ) {
+      return "O placar do time visitante é inválido.";
+    }
+  }
+
+  for (const championRegistrationId of payload?.championRegistrationIds ?? []) {
+    if (!registrationIds.has(championRegistrationId)) {
+      return "Um dos campeões selecionados não pertence a este campeonato.";
+    }
+  }
+
+  return null;
+}
+
 function normalizeAthlete(payload) {
   return {
     id: randomUUID(),
@@ -210,7 +304,7 @@ app.post("/api/auth/login", async (request, response) => {
 app.get("/api/tournaments", async (_request, response) => {
   try {
     const tournaments = await readTournaments();
-    response.json(tournaments);
+    response.json(tournaments.map((tournament) => sanitizeTournament(tournament)));
   } catch (error) {
     response.status(500).json({ message: "Não foi possível carregar os torneios." });
   }
@@ -233,6 +327,42 @@ app.post("/api/tournaments", async (request, response) => {
     response.status(201).json(tournament);
   } catch (error) {
     response.status(500).json({ message: "Não foi possível criar o campeonato." });
+  }
+});
+
+app.patch("/api/tournaments/:tournamentId/competition", async (request, response) => {
+  try {
+    const tournaments = await readTournaments();
+    const tournamentIndex = tournaments.findIndex((item) => item.id === request.params.tournamentId);
+
+    if (tournamentIndex < 0) {
+      response.status(404).json({ message: "Campeonato não encontrado." });
+      return;
+    }
+
+    const currentTournament = sanitizeTournament(tournaments[tournamentIndex]);
+    const registrations = (await readRegistrations()).filter(
+      (registration) => registration.tournamentId === currentTournament.id,
+    );
+    const validationError = validateCompetitionUpdate(request.body, registrations);
+
+    if (validationError) {
+      response.status(400).json({ message: validationError });
+      return;
+    }
+
+    const updatedTournament = sanitizeTournament({
+      ...currentTournament,
+      matches: (request.body.matches ?? currentTournament.matches).map((match) => normalizeMatch(match)),
+      championRegistrationIds: request.body.championRegistrationIds ?? currentTournament.championRegistrationIds,
+    });
+
+    const nextTournaments = [...tournaments];
+    nextTournaments[tournamentIndex] = updatedTournament;
+    await writeTournaments(nextTournaments);
+    response.json(updatedTournament);
+  } catch (error) {
+    response.status(500).json({ message: "Não foi possível atualizar os confrontos do campeonato." });
   }
 });
 
